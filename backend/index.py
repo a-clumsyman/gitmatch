@@ -111,7 +111,7 @@ def calculate_compatibility(user1_data, user2_data):
     }
 
     compatibility_score = (
-        weights["technical_alignment"] * (technical_alignment ** 1.2) +  # Exponential scaling for strong alignment
+        weights["technical_alignment"] * (technical_alignment ** 1.2) +  #  scaling for strong alignment
         weights["skill_complementarity"] * (skill_complementarity ** 1.1) +  # Slight boost for complementarity
         weights["activity_match"] * activity_match +  # Keep linear for activity match
         weights["common_followers"] * common_followers +  # Keep linear for network overlap
