@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+const baseUrl = import.meta.env.VITE_BACKEND_URL || 'https://gitmatch-backend.vercel.app/';
 
 export const compareUsersResponseSchema = z.object({
   match_type: z.string(),
