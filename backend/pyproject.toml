@@ -10,8 +10,8 @@ python = "^3.13"
 phidata = "^2.6.0"
 openai = "^1.57.0"
 uvicorn = "^0.32.1"
-fastapi = "^0.115.6"
-fastapi-cli = "^0.0.6"
+fastapi = "0.115.4"
+fastapi-cli = "0.0.5"
 
 
 [build-system]
