@@ -37,7 +37,9 @@ def fetch_github_user(username):
     response = requests.get(url, headers=HEADERS)
     if response.status_code == 200:
         return response.json()
-    raise HTTPException(status_code=response.status_code, detail=f"GitHub user {username} not found.")
+    # Improved error handling
+    error_detail = response.json().get("message", "Unknown error occurred.")
+    raise HTTPException(status_code=response.status_code, detail=f"GitHub user {username} not found. Error: {error_detail}")
 
 # Fetch top 20 latest repositories for a GitHub user
 def fetch_latest_repos(username):
