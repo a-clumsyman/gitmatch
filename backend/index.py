@@ -268,20 +268,29 @@ def read_root():
 
 @app.get("/auth/github")
 async def github_auth():
-    if not GITHUB_CLIENT_ID:
+    try:
+        if not GITHUB_CLIENT_ID:
+            print("Error: GITHUB_CLIENT_ID is not set")  # Debug log
+            raise HTTPException(
+                status_code=500,
+                detail="GitHub Client ID not configured"
+            )
+        
+        auth_url = (
+            "https://github.com/login/oauth/authorize"
+            f"?client_id={GITHUB_CLIENT_ID}"
+            "&scope=read:user,repo"
+            f"&redirect_uri={FRONTEND_URL}/auth/callback"
+        )
+        
+        print(f"Generated auth URL: {auth_url}")  # Debug log
+        return RedirectResponse(url=auth_url, status_code=302)
+    except Exception as e:
+        print(f"Error in github_auth: {str(e)}")  # Debug log
         raise HTTPException(
             status_code=500,
-            detail="GitHub Client ID not configured"
+            detail=f"Internal server error: {str(e)}"
         )
-    
-    auth_url = (
-        "https://github.com/login/oauth/authorize"
-        f"?client_id={GITHUB_CLIENT_ID}"
-        "&scope=read:user,repo"
-        f"&redirect_uri={FRONTEND_URL}/auth/callback"
-    )
-    
-    return RedirectResponse(url=auth_url, status_code=302)
 
 @app.post("/auth/github/callback")
 async def github_callback(code: str):
