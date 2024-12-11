@@ -11,11 +11,21 @@ import os
 # Load environment variables
 load_dotenv()
 
+# Get environment variables with fallback values
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+if not GITHUB_CLIENT_ID:
+    raise ValueError("GITHUB_CLIENT_ID environment variable is not set")
+
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+if not GITHUB_CLIENT_SECRET:
+    raise ValueError("GITHUB_CLIENT_SECRET environment variable is not set")
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 # Initialize FastAPI app
 app = FastAPI()
 
 # Add CORS middleware
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://gitmatch-frontend.vercel.app")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
@@ -27,8 +37,6 @@ app.add_middleware(
 # GitHub API Base URL
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_API_KEY = os.getenv("GITHUB_API_KEY")
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # Common headers for GitHub API requests
 HEADERS = {
@@ -260,7 +268,17 @@ def read_root():
 
 @app.get("/auth/github")
 async def github_auth():
-    state = os.urandom(16).hex()  # Generate random state
+    # Debug logging
+    print(f"GITHUB_CLIENT_ID: {GITHUB_CLIENT_ID}")
+    print(f"FRONTEND_URL: {FRONTEND_URL}")
+    
+    if not GITHUB_CLIENT_ID:
+        raise HTTPException(
+            status_code=500, 
+            detail="GitHub Client ID not configured"
+        )
+        
+    state = os.urandom(16).hex()
     auth_url = (
         "https://github.com/login/oauth/authorize"
         f"?client_id={GITHUB_CLIENT_ID}"
@@ -268,6 +286,7 @@ async def github_auth():
         f"&redirect_uri={FRONTEND_URL}/auth/callback"
         f"&state={state}"
     )
+    print(f"Redirecting to: {auth_url}")  # Debug log
     return RedirectResponse(url=auth_url, status_code=302)
 
 @app.post("/auth/github/callback")
