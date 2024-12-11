@@ -84,10 +84,10 @@ def fetch_following(username):
     return []
 
 # Calculate compatibility metrics
-def calculate_compatibility(user1_data, user2_data):
-    # Fetch repositories and data
-    user1_repos = fetch_latest_repos(user1_data["login"])
-    user2_repos = fetch_latest_repos(user2_data["login"])
+def calculate_compatibility(user1_data, user2_data, access_token):
+    # Fetch repositories and data with OAuth token
+    user1_repos = fetch_latest_repos(user1_data["login"], access_token)
+    user2_repos = fetch_latest_repos(user2_data["login"], access_token)
     
     user1_languages = {repo.get("language") for repo in user1_repos if repo.get("language")}
     user2_languages = {repo.get("language") for repo in user2_repos if repo.get("language")}
@@ -212,7 +212,14 @@ compatibility_agent = Agent(
 
 # FastAPI route to analyze compatibility between two GitHub usernames
 @app.get("/analyze-compatibility")
-def analyze_compatibility(username1: str, username2: str):
+async def analyze_compatibility(username1: str, username2: str, request: Request):
+    # Get OAuth token from request headers
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization token")
+    
+    access_token = auth_header.split(" ")[1]
+    
     # Check cache first
     cache_key = f"{username1}:{username2}"
     cached_result = compatibility_cache.find_one({
@@ -223,10 +230,10 @@ def analyze_compatibility(username1: str, username2: str):
     if cached_result:
         return cached_result["results"]
         
-    # If not in cache, calculate compatibility
-    user1 = fetch_github_user(username1)
-    user2 = fetch_github_user(username2)
-    compatibility_metrics = calculate_compatibility(user1, user2)
+    # If not in cache, calculate compatibility using OAuth token
+    user1 = fetch_github_user(username1, access_token)
+    user2 = fetch_github_user(username2, access_token)
+    compatibility_metrics = calculate_compatibility(user1, user2, access_token)
     
     # Store results in cache
     compatibility_cache.update_one(
