@@ -13,6 +13,8 @@ uvicorn = "^0.32.1"
 fastapi = "0.115.4"
 fastapi-cli = "0.0.5"
 requests = "^2.32.3"
+pymongo = "^4.6.2"
+python-dotenv = "^1.0.0"
 
 
 [build-system]
