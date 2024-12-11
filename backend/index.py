@@ -127,8 +127,8 @@ def calculate_compatibility(user1_data, user2_data, access_token):
     ) * 10
 
     # Network Synergy
-    user1_followers = set(fetch_followers(user1_data["login"]))
-    user2_followers = set(fetch_followers(user2_data["login"]))
+    user1_followers = set(fetch_followers(user1_data["login"], access_token))
+    user2_followers = set(fetch_followers(user2_data["login"], access_token))
     common_followers = len(user1_followers & user2_followers) / max(len(user1_followers | user2_followers), 1) * 10
 
     # Cultural Synergy
@@ -142,7 +142,7 @@ def calculate_compatibility(user1_data, user2_data, access_token):
     user2_avg_stars = sum(repo["stargazers_count"] for repo in user2_repos) / max(len(user2_repos), 1)
     popularity_match = min(user1_avg_stars, user2_avg_stars) / max(user1_avg_stars, user2_avg_stars, 1) * 10
 
-    # Weighting system
+    # Calculate final score with weights
     weights = {
         "technical_alignment": 0.2,
         "skill_complementarity": 0.1,
@@ -153,23 +153,20 @@ def calculate_compatibility(user1_data, user2_data, access_token):
     }
 
     compatibility_score = (
-        weights["technical_alignment"] * (technical_alignment ** 1.2) +  #  scaling for strong alignment
-        weights["skill_complementarity"] * (skill_complementarity ** 1.1) +  # Slight boost for complementarity
-        weights["activity_match"] * activity_match +  # Keep linear for activity match
-        weights["common_followers"] * common_followers +  # Keep linear for network overlap
-        weights["cultural_alignment"] * (cultural_alignment ** 1.3) +  # Higher emphasis on cultural alignment
-        weights["popularity_match"] * (popularity_match ** 1.1)  # Slight boost for popularity match
+        weights["technical_alignment"] * (technical_alignment ** 1.2) +
+        weights["skill_complementarity"] * (skill_complementarity ** 1.1) +
+        weights["activity_match"] * activity_match +
+        weights["common_followers"] * common_followers +
+        weights["cultural_alignment"] * (cultural_alignment ** 1.3) +
+        weights["popularity_match"] * (popularity_match ** 1.1)
     )
 
-    # Add a bonus for strong technical alignment
+    # Apply bonuses and penalties
     if len(shared_languages) > 5:
         compatibility_score += 2
-
-    # Penalize if activity levels are too low
     if activity_match < 3:
         compatibility_score -= 2
 
-    # Ensure the score stays within 0–100
     compatibility_score = max(0, min(compatibility_score, 100))
 
     return {
@@ -181,7 +178,7 @@ def calculate_compatibility(user1_data, user2_data, access_token):
         "cultural_alignment_score": round(cultural_alignment, 2),
         "community_impact_score": round(popularity_match, 2),
         "shared_languages": list(shared_languages),
-        "shared_repos": [],  # Fill this with relevant repository overlap
+        "shared_repos": [],
         "shared_followers": list(user1_followers & user2_followers),
     }
 
