@@ -214,41 +214,77 @@ compatibility_agent = Agent(
 # FastAPI route to analyze compatibility between two GitHub usernames
 @app.get("/analyze-compatibility")
 async def analyze_compatibility(username1: str, username2: str, request: Request):
-    # Get OAuth token from request headers
+    # Validate authorization
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization token")
     
     access_token = auth_header.split(" ")[1]
     
-    # Check cache first
-    cache_key = f"{username1}:{username2}"
-    cached_result = compatibility_cache.find_one({
-        "users": cache_key,
-        "timestamp": {"$gt": datetime.utcnow() - timedelta(hours=24)}
-    })
-    
-    if cached_result:
-        return cached_result["results"]
+    try:
+        # Validate the access token by making a test request
+        test_response = requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if test_response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid GitHub token")
         
-    # If not in cache, calculate compatibility using OAuth token
-    user1 = fetch_github_user(username1, access_token)
-    user2 = fetch_github_user(username2, access_token)
-    compatibility_metrics = calculate_compatibility(user1, user2, access_token)
-    
-    # Store results in cache
-    compatibility_cache.update_one(
-        {"users": cache_key},
-        {
-            "$set": {
-                "results": compatibility_metrics,
+        # Check cache first
+        cache_key = f"{username1}:{username2}"
+        cached_result = compatibility_cache.find_one({
+            "users": cache_key,
+            "timestamp": {"$gt": datetime.utcnow() - timedelta(hours=24)}
+        })
+        
+        if cached_result:
+            return cached_result["results"]
+        
+        # Get metrics
+        user1 = fetch_github_user(username1, access_token)
+        user2 = fetch_github_user(username2, access_token)
+        
+        # Calculate compatibility
+        compatibility_metrics = calculate_compatibility(user1, user2, access_token)
+        
+        # Generate insights using the agent
+        insights = compatibility_agent.run(compatibility_metrics)
+        
+        # Combine metrics with insights
+        final_results = {
+            **compatibility_metrics,
+            "match_type": insights.get("match_type", "Match type unavailable"),
+            "compatibility_summary": insights.get("compatibility_summary", "Summary unavailable"),
+            "strengths_and_opportunities": insights.get("strengths_and_opportunities", "Analysis unavailable"),
+            "collaboration_plan": insights.get("collaboration_plan", "Plan unavailable"),
+            "motivational_message": insights.get("motivational_message", "Message unavailable"),
+            "valuable_insights": insights.get("valuable_insights", {
+                "activity_trends": "Trends unavailable",
+                "repository_impact": "Impact unavailable",
+                "follower_engagement": "Engagement unavailable"
+            })
+        }
+        
+        # Cache results
+        compatibility_cache.update_one(
+            {"users": cache_key},
+            {"$set": {
+                "results": final_results,
                 "timestamp": datetime.utcnow().isoformat()
-            }
-        },
-        upsert=True
-    )
-    
-    return compatibility_metrics
+            }},
+            upsert=True
+        )
+        
+        return final_results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in analyze_compatibility: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze compatibility: {str(e)}"
+        )
 
 # Root endpoint
 @app.get("/")
