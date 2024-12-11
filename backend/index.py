@@ -41,12 +41,6 @@ app.add_middleware(
 
 # GitHub API Base URL
 GITHUB_API_URL = "https://api.github.com"
-GITHUB_API_KEY = os.getenv("GITHUB_API_KEY")
-
-# Common headers for GitHub API requests
-HEADERS = {
-    "Authorization": f"token {GITHUB_API_KEY}"
-}
 
 # Initialize MongoDB
 mongo_client, database_name = get_mongodb_client()
@@ -55,27 +49,29 @@ users_collection = db.users
 compatibility_cache = db.compatibility_cache
 
 # Fetch GitHub user data
-def fetch_github_user(username):
+def fetch_github_user(username, access_token):
     url = f"{GITHUB_API_URL}/users/{username}"
-    response = requests.get(url, headers=HEADERS)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
-    # Improved error handling
     error_detail = response.json().get("message", "Unknown error occurred.")
     raise HTTPException(status_code=response.status_code, detail=f"GitHub user {username} not found. Error: {error_detail}")
 
 # Fetch top 20 latest repositories for a GitHub user
-def fetch_latest_repos(username):
+def fetch_latest_repos(username, access_token):
     url = f"{GITHUB_API_URL}/users/{username}/repos"
-    response = requests.get(url, params={"per_page": 20, "sort": "updated"}, headers=HEADERS)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, params={"per_page": 20, "sort": "updated"}, headers=headers)
     if response.status_code == 200:
         return response.json()
     raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch repositories for {username}")
 
-# Fetch followers and following data
-def fetch_followers(username):
+# Fetch followers data
+def fetch_followers(username, access_token):
     url = f"{GITHUB_API_URL}/users/{username}/followers"
-    response = requests.get(url, headers=HEADERS)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return [user["login"] for user in response.json()]
     return []
@@ -280,48 +276,67 @@ async def github_auth():
 
 @app.post("/auth/github/callback")
 async def github_callback(request: Request):
-    data = await request.json()
-    code = data.get("code")
-    
-    if not code:
-        raise HTTPException(status_code=400, detail="No code provided")
-    
-    # Get access token from GitHub
-    token_response = requests.post(
-        "https://github.com/login/oauth/access_token",
-        headers={"Accept": "application/json"},
-        data={
-            "client_id": GITHUB_CLIENT_ID,
-            "client_secret": GITHUB_CLIENT_SECRET,
-            "code": code
-        }
-    )
-    
-    token_data = token_response.json()
-    access_token = token_data.get("access_token")
-    
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No access token received")
-    
-    # Fetch and store user data
-    user_response = requests.get(
-        "https://api.github.com/user",
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
-    user_data = user_response.json()
-    
-    # Store in MongoDB
-    users_collection.update_one(
-        {"github_id": str(user_data["id"])},
-        {
-            "$set": {
-                "username": user_data["login"],
-                "access_token": access_token,
-                "avatar_url": user_data.get("avatar_url"),
-                "last_updated": datetime.utcnow().isoformat()
+    try:
+        data = await request.json()
+        code = data.get("code")
+        
+        if not code:
+            raise HTTPException(status_code=400, detail="No code provided")
+        
+        # Exchange code for access token
+        token_response = requests.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            data={
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": f"{FRONTEND_URL}/auth/callback"
             }
-        },
-        upsert=True
-    )
-    
-    return {"access_token": access_token}
+        )
+        
+        if token_response.status_code != 200:
+            print(f"Token exchange failed: {token_response.text}")
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+        
+        token_data = token_response.json()
+        access_token = token_data.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token received")
+        
+        # Fetch user data from GitHub
+        user_response = requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        
+        if user_response.status_code != 200:
+            print(f"User data fetch failed: {user_response.text}")
+            raise HTTPException(status_code=400, detail="Failed to fetch user data")
+        
+        user_data = user_response.json()
+        
+        # Store in MongoDB
+        users_collection.update_one(
+            {"github_id": str(user_data["id"])},
+            {
+                "$set": {
+                    "username": user_data["login"],
+                    "access_token": access_token,
+                    "avatar_url": user_data.get("avatar_url"),
+                    "last_updated": datetime.utcnow().isoformat()
+                }
+            },
+            upsert=True
+        )
+        
+        return {"access_token": access_token}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Callback error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )

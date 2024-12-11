@@ -12,6 +12,7 @@ def get_mongodb_client():
         database_name = os.getenv("MONGO_DB")
 
         if not all([username, password, cluster, options, database_name]):
+            print("Missing MongoDB environment variables")
             raise ValueError("Missing MongoDB environment variables")
 
         encoded_username = quote_plus(username)
@@ -27,5 +28,5 @@ def get_mongodb_client():
         print(f"MongoDB connection error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Database connection failed"
+            detail=f"Database connection failed: {str(e)}"
         )
