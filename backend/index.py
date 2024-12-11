@@ -28,7 +28,6 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -270,7 +269,7 @@ def read_root():
 async def github_auth():
     try:
         if not GITHUB_CLIENT_ID:
-            print("Error: GITHUB_CLIENT_ID is not set")  # Debug log
+            print("Error: GITHUB_CLIENT_ID is not set")
             raise HTTPException(
                 status_code=500,
                 detail="GitHub Client ID not configured"
@@ -281,12 +280,13 @@ async def github_auth():
             f"?client_id={GITHUB_CLIENT_ID}"
             "&scope=read:user,repo"
             f"&redirect_uri={FRONTEND_URL}/auth/callback"
+            f"&state={os.urandom(16).hex()}"
         )
         
-        print(f"Generated auth URL: {auth_url}")  # Debug log
+        print(f"Generated auth URL: {auth_url}")
         return RedirectResponse(url=auth_url, status_code=302)
     except Exception as e:
-        print(f"Error in github_auth: {str(e)}")  # Debug log
+        print(f"Error in github_auth: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
