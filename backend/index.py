@@ -28,6 +28,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -293,8 +294,13 @@ async def github_auth():
         )
 
 @app.post("/auth/github/callback")
-async def github_callback(code: str):
-    # Exchange code for access token
+async def github_callback(request: Request):
+    data = await request.json()
+    code = data.get("code")
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="No code provided")
+    
     token_response = requests.post(
         "https://github.com/login/oauth/access_token",
         headers={"Accept": "application/json"},
