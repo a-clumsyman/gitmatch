@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import json
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from config.mongodb import get_mongodb_client
+from datetime import datetime, timedelta
 
 # Load environment variables
 load_dotenv()
@@ -42,6 +44,12 @@ GITHUB_API_KEY = os.getenv("GITHUB_API_KEY")
 HEADERS = {
     "Authorization": f"token {GITHUB_API_KEY}"
 }
+
+# Initialize MongoDB
+mongo_client, database_name = get_mongodb_client()
+db = mongo_client[database_name]
+users_collection = db.users
+compatibility_cache = db.compatibility_cache
 
 # Fetch GitHub user data
 def fetch_github_user(username):
@@ -206,60 +214,34 @@ compatibility_agent = Agent(
 # FastAPI route to analyze compatibility between two GitHub usernames
 @app.get("/analyze-compatibility")
 def analyze_compatibility(username1: str, username2: str):
+    # Check cache first
+    cache_key = f"{username1}:{username2}"
+    cached_result = compatibility_cache.find_one({
+        "users": cache_key,
+        "timestamp": {"$gt": datetime.utcnow() - timedelta(hours=24)}
+    })
+    
+    if cached_result:
+        return cached_result["results"]
+        
+    # If not in cache, calculate compatibility
     user1 = fetch_github_user(username1)
     user2 = fetch_github_user(username2)
-
-    # Calculate compatibility metrics
     compatibility_metrics = calculate_compatibility(user1, user2)
-
-    # Prepare insights for the agent
-    compatibility_metrics_summary = {
-        "shared_languages": compatibility_metrics["shared_languages"][:10],
-        "shared_repos": compatibility_metrics["shared_repos"][:5],
-        "common_followers": compatibility_metrics["shared_followers"],
-        "valuable_insights": {
-            "activity_trends": f"{username1} has {user1['public_repos']} public repos, while {username2} has {user2['public_repos']}.",
-            "repository_impact": f"{username1}'s repos average {compatibility_metrics['community_impact_score']} stars, while {username2}'s are gaining momentum.",
-            "follower_engagement": f"Shared followers include {', '.join(compatibility_metrics['shared_followers'][:3])}."
-        }
-    }
-
-    message = [
-        {"role": "user", "content": f"Analyze the collaboration potential between GitHub users {username1} and {username2}."},
-        {"role": "system", "content": json.dumps(compatibility_metrics_summary)}  # Ensure content is a JSON string
-    ]
-
-    # Get insights from the agent
-    try:
-        agent_response = compatibility_agent.run(json.dumps(message))
-        # Check if the response is empty
-        if not agent_response.content:
-            raise ValueError("Received empty response from the agent.")
-        clean_response = (
-            agent_response.content
-            .replace('```json', '')
-            .replace('```', '')
-            .strip()
-        )
-        insights = json.loads(clean_response)
-        # insights = json.loads(agent_response.content) if isinstance(agent_response.content, str) else agent_response.content
-    except Exception as e:
-        # Log the error and the response content for debugging
-        raise HTTPException(status_code=500, detail=f"Agent processing error: {str(e)}. Response content: {getattr(agent_response, 'content', 'No content')}")
     
-    # Return insights from the agent
-    return {
-        "match_type": insights.get("match_type", "No match type provided."),
-        "compatibility_summary": insights.get("compatibility_summary", "Unable to generate summary."),
-        "strengths_and_opportunities": insights.get("strengths_and_opportunities", "No detailed insights available."),
-        "collaboration_plan": insights.get("collaboration_plan", "No collaboration suggestions provided."),
-        "motivational_message": insights.get("motivational_message", "Keep building and collaborating!"),
-        "valuable_insights": insights.get("valuable_insights", {
-            "activity_trends": "No activity data available.",
-            "repository_impact": "No repository impact data available.",
-            "follower_engagement": "No follower data available."
-        })
-    }
+    # Store results in cache
+    compatibility_cache.update_one(
+        {"users": cache_key},
+        {
+            "$set": {
+                "results": compatibility_metrics,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        },
+        upsert=True
+    )
+    
+    return compatibility_metrics
 
 # Root endpoint
 @app.get("/")
@@ -320,5 +302,28 @@ async def github_callback(request: Request):
     
     if not access_token:
         raise HTTPException(status_code=400, detail="No access token received")
+    
+    # Store user data in MongoDB
+    user_response = requests.get(
+        "https://api.github.com/user",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    user_data = user_response.json()
+    
+    users_collection.update_one(
+        {"github_id": str(user_data["id"])},
+        {
+            "$set": {
+                "username": user_data["login"],
+                "access_token": access_token,
+                "avatar_url": user_data.get("avatar_url"),
+                "public_repos": user_data.get("public_repos", 0),
+                "followers": user_data.get("followers", 0),
+                "following": user_data.get("following", 0),
+                "last_updated": datetime.utcnow().isoformat()
+            }
+        },
+        upsert=True
+    )
     
     return {"access_token": access_token}
