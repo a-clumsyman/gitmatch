@@ -7,7 +7,15 @@
             "config": {
                 "maxLambdaSize": "15mb",
                 "runtime": "python3.9",
-                "pip": ["pymongo", "fastapi", "uvicorn", "python-dotenv", "requests", "phidata", "openai"]
+                "pip": [
+                    "fastapi==0.115.4",
+                    "uvicorn==0.32.1",
+                    "python-dotenv==1.0.0",
+                    "requests==2.32.3", 
+                    "pymongo[srv]==4.6.2",
+                    "phidata==2.6.0",
+                    "openai==1.57.0"
+                ]
             }
         }
     ],
@@ -17,4 +25,4 @@
             "dest": "index.py"
         }
     ]
-}
+} 
