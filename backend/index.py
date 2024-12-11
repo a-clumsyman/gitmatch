@@ -76,9 +76,10 @@ def fetch_followers(username, access_token):
         return [user["login"] for user in response.json()]
     return []
 
-def fetch_following(username):
+def fetch_following(username, access_token):
     url = f"{GITHUB_API_URL}/users/{username}/following"
-    response = requests.get(url, headers=HEADERS)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return [user["login"] for user in response.json()]
     return []
