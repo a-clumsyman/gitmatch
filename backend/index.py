@@ -50,13 +50,35 @@ compatibility_cache = db.compatibility_cache
 
 # Fetch GitHub user data
 def fetch_github_user(username, access_token):
-    url = f"{GITHUB_API_URL}/users/{username}"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
+    try:
+        url = f"{GITHUB_API_URL}/users/{username}"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 401:
+            raise HTTPException(status_code=401, detail="Invalid GitHub token")
+        elif response.status_code == 403:
+            raise HTTPException(status_code=403, detail="GitHub API rate limit exceeded")
+        elif response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"GitHub user {username} not found")
+        elif response.status_code != 200:
+            error_detail = response.json().get("message", "Unknown error occurred")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"GitHub API error: {error_detail}"
+            )
+        
         return response.json()
-    error_detail = response.json().get("message", "Unknown error occurred.")
-    raise HTTPException(status_code=response.status_code, detail=f"GitHub user {username} not found. Error: {error_detail}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch GitHub user data: {str(e)}"
+        )
 
 # Fetch top 20 latest repositories for a GitHub user
 def fetch_latest_repos(username, access_token):
