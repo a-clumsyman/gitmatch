@@ -283,19 +283,16 @@ async def github_callback(request: Request):
     if not code:
         raise HTTPException(status_code=400, detail="No code provided")
     
+    # Get access token from GitHub
     token_response = requests.post(
         "https://github.com/login/oauth/access_token",
         headers={"Accept": "application/json"},
         data={
             "client_id": GITHUB_CLIENT_ID,
             "client_secret": GITHUB_CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": f"{FRONTEND_URL}/auth/callback"
+            "code": code
         }
     )
-    
-    if token_response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Failed to get access token")
     
     token_data = token_response.json()
     access_token = token_data.get("access_token")
@@ -303,13 +300,14 @@ async def github_callback(request: Request):
     if not access_token:
         raise HTTPException(status_code=400, detail="No access token received")
     
-    # Store user data in MongoDB
+    # Fetch and store user data
     user_response = requests.get(
         "https://api.github.com/user",
         headers={"Authorization": f"Bearer {access_token}"}
     )
     user_data = user_response.json()
     
+    # Store in MongoDB
     users_collection.update_one(
         {"github_id": str(user_data["id"])},
         {
@@ -317,9 +315,6 @@ async def github_callback(request: Request):
                 "username": user_data["login"],
                 "access_token": access_token,
                 "avatar_url": user_data.get("avatar_url"),
-                "public_repos": user_data.get("public_repos", 0),
-                "followers": user_data.get("followers", 0),
-                "following": user_data.get("following", 0),
                 "last_updated": datetime.utcnow().isoformat()
             }
         },
