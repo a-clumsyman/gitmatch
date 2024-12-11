@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
 import requests
 from phi.agent import Agent
 from phi.model.xai import xAI
@@ -14,9 +15,10 @@ load_dotenv()
 app = FastAPI()
 
 # Add CORS middleware
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://gitmatch-frontend.vercel.app")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,6 +27,8 @@ app.add_middleware(
 # GitHub API Base URL
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_API_KEY = os.getenv("GITHUB_API_KEY")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # Common headers for GitHub API requests
 HEADERS = {
@@ -253,3 +257,40 @@ def analyze_compatibility(username1: str, username2: str):
 @app.get("/")
 def read_root():
     return {"message": "GitHub Compatibility Tool is live!"}
+
+@app.get("/auth/github")
+async def github_auth():
+    state = os.urandom(16).hex()  # Generate random state
+    auth_url = (
+        "https://github.com/login/oauth/authorize"
+        f"?client_id={GITHUB_CLIENT_ID}"
+        "&scope=read:user,repo"
+        f"&redirect_uri={FRONTEND_URL}/auth/callback"
+        f"&state={state}"
+    )
+    return RedirectResponse(url=auth_url, status_code=302)
+
+@app.post("/auth/github/callback")
+async def github_callback(code: str):
+    # Exchange code for access token
+    token_response = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        data={
+            "client_id": GITHUB_CLIENT_ID,
+            "client_secret": GITHUB_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": f"{FRONTEND_URL}/auth/callback"
+        }
+    )
+    
+    if token_response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to get access token")
+    
+    token_data = token_response.json()
+    access_token = token_data.get("access_token")
+    
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token received")
+    
+    return {"access_token": access_token}
