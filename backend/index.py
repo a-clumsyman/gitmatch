@@ -90,13 +90,34 @@ def fetch_latest_repos(username, access_token):
     raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch repositories for {username}")
 
 # Fetch followers data
-def fetch_followers(username, access_token):
-    url = f"{GITHUB_API_URL}/users/{username}/followers"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
+def fetch_followers(username: str, access_token: str):
+    try:
+        url = f"{GITHUB_API_URL}/users/{username}/followers"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 401:
+            raise HTTPException(status_code=401, detail="Invalid GitHub token")
+        elif response.status_code == 403:
+            raise HTTPException(status_code=403, detail="GitHub API rate limit exceeded")
+        elif response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"GitHub user {username} not found")
+        elif response.status_code != 200:
+            error_detail = response.json().get("message", "Unknown error occurred")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"GitHub API error: {error_detail}"
+            )
+        
         return [user["login"] for user in response.json()]
-    return []
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching followers: {str(e)}")
+        return []  # Return empty list on error to prevent analysis failure
 
 def fetch_following(username, access_token):
     url = f"{GITHUB_API_URL}/users/{username}/following"
