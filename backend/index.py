@@ -14,11 +14,11 @@ load_dotenv()
 # Get environment variables with fallback values
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 if not GITHUB_CLIENT_ID:
-    raise ValueError("GITHUB_CLIENT_ID environment variable is not set")
+    raise ValueError("GITHUB_CLIENT_ID must be set")
 
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 if not GITHUB_CLIENT_SECRET:
-    raise ValueError("GITHUB_CLIENT_SECRET environment variable is not set")
+    raise ValueError("GITHUB_CLIENT_SECRET must be set")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
@@ -268,25 +268,19 @@ def read_root():
 
 @app.get("/auth/github")
 async def github_auth():
-    # Debug logging
-    print(f"GITHUB_CLIENT_ID: {GITHUB_CLIENT_ID}")
-    print(f"FRONTEND_URL: {FRONTEND_URL}")
-    
     if not GITHUB_CLIENT_ID:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="GitHub Client ID not configured"
         )
-        
-    state = os.urandom(16).hex()
+    
     auth_url = (
         "https://github.com/login/oauth/authorize"
         f"?client_id={GITHUB_CLIENT_ID}"
         "&scope=read:user,repo"
         f"&redirect_uri={FRONTEND_URL}/auth/callback"
-        f"&state={state}"
     )
-    print(f"Redirecting to: {auth_url}")  # Debug log
+    
     return RedirectResponse(url=auth_url, status_code=302)
 
 @app.post("/auth/github/callback")
